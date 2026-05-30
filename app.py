@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Nueva API de cobalt 10
 COBALT_API = "https://api.cobalt.tools/api/json"
 
 @app.route('/')
@@ -19,67 +20,68 @@ def info():
     url = request.json.get('url')
     tipo = request.json.get('tipo', 'video')
     
-    logger.info(f"Solicitud recibida: URL={url}, tipo={tipo}")
+    logger.info(f"Solicitud: URL={url}, tipo={tipo}")
     
     if not url:
         return jsonify({'success': False, 'error': 'URL requerida'}), 400
     
     try:
+        # Headers requeridos por la nueva API
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         
+        # Nuevo formato de la API cobalt 10
         data = {
             "url": url,
-            "isAudioOnly": tipo == 'audio',  # Corregido: isAudioOnly, no isAudio
-            "filenamePattern": "basic",
-            "downloadMode": "auto"
+            "downloadMode": "auto",  # "auto" o "audio"
+            "filenameStyle": "basic",  # "basic", "pretty", "classic"
         }
         
-        logger.info(f"Enviando a cobalt: {data}")
+        # Si es solo audio
+        if tipo == 'audio':
+            data["downloadMode"] = "audio"
+            data["audioFormat"] = "mp3"  # mp3, ogg, wav, opus
+        
+        logger.info(f"Enviando: {data}")
         
         response = requests.post(
             COBALT_API, 
             json=data, 
             headers=headers, 
-            timeout=30
+            timeout=60  # Más tiempo por si acaso
         )
         
-        logger.info(f"Respuesta status: {response.status_code}")
-        logger.info(f"Respuesta body: {response.text}")
+        logger.info(f"Status: {response.status_code}")
+        logger.info(f"Respuesta: {response.text[:500]}")
         
         result = response.json()
         
-        if result.get('status') == 'stream':
+        if result.get('status') == 'tunnel' or result.get('status') == 'stream':
             return jsonify({
                 'success': True,
                 'url': result['url'],
                 'filename': result.get('filename', 'download')
             })
         elif result.get('status') == 'error':
-            error_info = result.get('error', {})
-            error_text = error_info.get('code') or error_info.get('text') or 'Error desconocido'
+            error_text = result.get('text', 'Error desconocido')
             return jsonify({
                 'success': False, 
-                'error': error_text,
-                'full_response': result  # Para debug
+                'error': error_text
             }), 400
         else:
             return jsonify({
                 'success': False, 
-                'error': f'Status inesperado: {result.get("status")}',
-                'full_response': result
+                'error': f'Respuesta: {result.get("status")}'
             }), 400
             
     except requests.Timeout:
-        logger.error("Timeout")
-        return jsonify({'success': False, 'error': 'Timeout - API muy lenta'}), 504
+        return jsonify({'success': False, 'error': 'Timeout'}), 504
     except Exception as e:
-        logger.error(f"Exception: {str(e)}")
+        logger.error(f"Error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port)
