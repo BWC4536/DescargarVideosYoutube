@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Descargador YouTube</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>📥 Descargador YouTube</h1>
+        
+        <form action="/descargar" method="POST" id="formDescargar">
+            <div class="input-group">
+                <label for="url">Enlace del video:</label>
+                <input type="text" id="url" name="url" placeholder="https://youtube.com/watch?v=..." required>
+            </div>
+            
+            <div class="opciones">
+                <label class="opcion">
+                    <input type="radio" name="tipo" value="video" checked>
+                    <span>Video (MP4)</span>
+                </label>
+                <label class="opcion">
+                    <input type="radio" name="tipo" value="audio">
+                    <span>Solo Audio (MP3)</span>
+                </label>
+            </div>
+            
+            <button type="submit" id="btnDescargar">
+                Descargar
+            </button>
+        </form>
+        
+        <div class="cargando" id="cargando">
+            <div class="spinner"></div>
+            <p>Descargando y procesando...</p>
+            <small>Esto puede tardar unos segundos</small>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('formDescargar').addEventListener('submit', function(e) {
+            document.getElementById('btnDescargar').style.display = 'none';
+            document.getElementById('cargando').style.display = 'block';
+        });
+    </script>
+</body>
+</html>
