@@ -1,86 +1,70 @@
 from flask import Flask, render_template, request, jsonify
 import requests
-import os
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import re
 
 app = Flask(__name__)
 
-# Nueva API de cobalt 10
-COBALT_API = "https://api.cobalt.tools/api/json"
-
-@app.route('/')
-def index():
-    return render_template('index.html')
+def obtener_y2mate(url):
+    """API no oficial de y2mate"""
+    try:
+        # Extraer ID del video
+        if 'youtu.be' in url:
+            video_id = url.split('/')[-1].split('?')[0]
+        else:
+            match = re.search(r'[?&]v=([^&]+)', url)
+            video_id = match.group(1) if match else None
+        
+        if not video_id:
+            return None, "No se pudo extraer ID del video"
+        
+        # Obtener info del video
+        info_url = "https://www.y2mate.com/mates/analyzeV2/ajax"
+        data = {
+            'k_query': f'https://www.youtube.com/watch?v={video_id}',
+            'k_page': 'home',
+            'hl': 'es',
+            'q_auto': '0'
+        }
+        
+        headers = {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        }
+        
+        resp = requests.post(info_url, data=data, headers=headers, timeout=30)
+        result = resp.json()
+        
+        if result.get('status') == 'ok':
+            links = result.get('links', {}).get('mp4', {})
+            if links:
+                # Tomar la mejor calidad
+                best = list(links.values())[-1]
+                return best.get('k'), result.get('title', 'video')
+        
+        return None, "No se encontraron enlaces"
+        
+    except Exception as e:
+        return None, str(e)
 
 @app.route('/api/info', methods=['POST'])
 def info():
     url = request.json.get('url')
     tipo = request.json.get('tipo', 'video')
     
-    logger.info(f"Solicitud: URL={url}, tipo={tipo}")
+    if tipo == 'audio':
+        # Para audio usar cobalt si funciona, o indicar que no está disponible
+        return jsonify({'success': False, 'error': 'Audio no disponible en esta alternativa'})
     
-    if not url:
-        return jsonify({'success': False, 'error': 'URL requerida'}), 400
+    link, titulo = obtener_y2mate(url)
     
-    try:
-        # Headers requeridos por la nueva API
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-        
-        # Nuevo formato de la API cobalt 10
-        data = {
-            "url": url,
-            "downloadMode": "auto",  # "auto" o "audio"
-            "filenameStyle": "basic",  # "basic", "pretty", "classic"
-        }
-        
-        # Si es solo audio
-        if tipo == 'audio':
-            data["downloadMode"] = "audio"
-            data["audioFormat"] = "mp3"  # mp3, ogg, wav, opus
-        
-        logger.info(f"Enviando: {data}")
-        
-        response = requests.post(
-            COBALT_API, 
-            json=data, 
-            headers=headers, 
-            timeout=60  # Más tiempo por si acaso
-        )
-        
-        logger.info(f"Status: {response.status_code}")
-        logger.info(f"Respuesta: {response.text[:500]}")
-        
-        result = response.json()
-        
-        if result.get('status') == 'tunnel' or result.get('status') == 'stream':
-            return jsonify({
-                'success': True,
-                'url': result['url'],
-                'filename': result.get('filename', 'download')
-            })
-        elif result.get('status') == 'error':
-            error_text = result.get('text', 'Error desconocido')
-            return jsonify({
-                'success': False, 
-                'error': error_text
-            }), 400
-        else:
-            return jsonify({
-                'success': False, 
-                'error': f'Respuesta: {result.get("status")}'
-            }), 400
-            
-    except requests.Timeout:
-        return jsonify({'success': False, 'error': 'Timeout'}), 504
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    if link:
+        return jsonify({
+            'success': True,
+            'url': link,
+            'filename': f'{titulo}.mp4'
+        })
+    else:
+        return jsonify({'success': False, 'error': titulo}), 400
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
