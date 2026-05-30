@@ -46,6 +46,14 @@ def descargar():
             'outtmpl': f'{TEMP_DIR}/%(title)s_{session_id}.%(ext)s',
             'noplaylist': True,
             'quiet': True,
+            # Esto usa el extractor de iOS que YouTube bloquea menos
+            'extractor_args': {
+                'youtube': {
+                    'player_client': 'ios',  # o 'android'
+                    'player_skip': ['webpage', 'config', 'js'],
+                }
+            },
+            'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15',
         }
         
         if tipo == 'audio':
