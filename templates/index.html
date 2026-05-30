@@ -105,11 +105,9 @@
         
         function mostrarError(msg) {
             const error = document.getElementById('error');
-            error.textContent = msg;
+            error.innerHTML = '<strong>Error:</strong> ' + msg;
             error.style.display = 'block';
-            setTimeout(() => {
-                error.style.display = 'none';
-            }, 5000);
+            console.error('Error completo:', msg);
         }
         
         // Enter para descargar
