@@ -2,46 +2,119 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Descargador YouTube</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <h1>📥 Descargador YouTube</h1>
+        <p class="subtitle">Rápido, gratuito y sin anuncios</p>
         
-        <form action="/descargar" method="POST" id="formDescargar">
-            <div class="input-group">
-                <label for="url">Enlace del video:</label>
-                <input type="text" id="url" name="url" placeholder="https://youtube.com/watch?v=..." required>
-            </div>
-            
-            <div class="opciones">
-                <label class="opcion">
-                    <input type="radio" name="tipo" value="video" checked>
-                    <span>Video (MP4)</span>
-                </label>
-                <label class="opcion">
-                    <input type="radio" name="tipo" value="audio">
-                    <span>Solo Audio (MP3)</span>
-                </label>
-            </div>
-            
-            <button type="submit" id="btnDescargar">
-                Descargar
-            </button>
-        </form>
+        <div class="input-group">
+            <input type="text" id="url" placeholder="Pega el enlace de YouTube aquí..." autocomplete="off">
+        </div>
+        
+        <div class="opciones">
+            <label class="opcion">
+                <input type="radio" name="tipo" value="video" checked>
+                <span>🎬 Video MP4</span>
+            </label>
+            <label class="opcion">
+                <input type="radio" name="tipo" value="audio">
+                <span>🎵 Audio MP3</span>
+            </label>
+        </div>
+        
+        <button onclick="descargar()" id="btnDescargar">
+            Descargar
+        </button>
         
         <div class="cargando" id="cargando">
             <div class="spinner"></div>
-            <p>Descargando y procesando...</p>
-            <small>Esto puede tardar unos segundos</small>
+            <p>Procesando...</p>
+            <small>Esto solo toma unos segundos</small>
         </div>
+        
+        <div id="resultado" class="resultado" style="display: none;">
+            <p>✅ Listo para descargar</p>
+            <a id="linkDescarga" href="#" target="_blank" class="btn-descarga">
+                ⬇️ Click para descargar
+            </a>
+        </div>
+        
+        <div id="error" class="error-msg" style="display: none;"></div>
     </div>
 
     <script>
-        document.getElementById('formDescargar').addEventListener('submit', function(e) {
-            document.getElementById('btnDescargar').style.display = 'none';
-            document.getElementById('cargando').style.display = 'block';
+        async function descargar() {
+            const url = document.getElementById('url').value.trim();
+            const tipo = document.querySelector('input[name="tipo"]:checked').value;
+            const btn = document.getElementById('btnDescargar');
+            const cargando = document.getElementById('cargando');
+            const resultado = document.getElementById('resultado');
+            const error = document.getElementById('error');
+            
+            if (!url) {
+                mostrarError('Por favor ingresa una URL de YouTube');
+                return;
+            }
+            
+            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+                mostrarError('URL no válida. Debe ser de YouTube');
+                return;
+            }
+            
+            // Reset UI
+            btn.disabled = true;
+            btn.textContent = 'Procesando...';
+            cargando.style.display = 'block';
+            resultado.style.display = 'none';
+            error.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/info', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url, tipo })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Mostrar botón de descarga
+                    document.getElementById('linkDescarga').href = data.url;
+                    resultado.style.display = 'block';
+                    
+                    // Auto-descargar en nueva pestaña
+                    window.open(data.url, '_blank');
+                } else {
+                    mostrarError('Error: ' + (data.error || 'No se pudo procesar el video'));
+                }
+                
+            } catch (e) {
+                mostrarError('Error de conexión. Intenta de nuevo.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Descargar';
+                cargando.style.display = 'none';
+            }
+        }
+        
+        function mostrarError(msg) {
+            const error = document.getElementById('error');
+            error.textContent = msg;
+            error.style.display = 'block';
+            setTimeout(() => {
+                error.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Enter para descargar
+        document.getElementById('url').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') descargar();
         });
     </script>
 </body>

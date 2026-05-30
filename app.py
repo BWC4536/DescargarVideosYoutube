@@ -1,25 +1,10 @@
-from flask import Flask, render_template, request, send_file
-import yt_dlp
+from flask import Flask, render_template, request, jsonify, redirect
+import requests
 import os
-import tempfile
-import uuid
-import time
 
 app = Flask(__name__)
 
-# Usar /tmp en Render (ephemeral pero funciona)
-TEMP_DIR = '/tmp/downloads'
-
-def limpiar_viejos():
-    try:
-        if not os.path.exists(TEMP_DIR):
-            return
-        for f in os.listdir(TEMP_DIR):
-            path = os.path.join(TEMP_DIR, f)
-            if os.path.isfile(path) and time.time() - os.path.getmtime(path) > 1800:
-                os.remove(path)
-    except:
-        pass
+COBALT_API = "https://api.cobalt.tools/api/json"
 
 @app.route('/')
 def index():
@@ -33,55 +18,83 @@ def descargar():
     if not url:
         return "URL requerida", 400
     
-    limpiar_viejos()
-    
-    if not os.path.exists(TEMP_DIR):
-        os.makedirs(TEMP_DIR)
-    
-    session_id = str(uuid.uuid4())[:8]
-    
     try:
-        opciones = {
-            'format': 'bestaudio/best' if tipo == 'audio' else 'best[ext=mp4]/best',
-            'outtmpl': f'{TEMP_DIR}/%(title)s_{session_id}.%(ext)s',
-            'noplaylist': True,
-            'quiet': True,
-            # Esto usa el extractor de iOS que YouTube bloquea menos
-            'extractor_args': {
-                'youtube': {
-                    'player_client': 'ios',  # o 'android'
-                    'player_skip': ['webpage', 'config', 'js'],
-                }
-            },
-            'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15',
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
         }
         
-        if tipo == 'audio':
-            opciones['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
+        data = {
+            "url": url,
+            "isAudio": tipo == 'audio',
+            "filenamePattern": "basic"
+        }
         
-        with yt_dlp.YoutubeDL(opciones) as ydl:
-            info = ydl.extract_info(url, download=True)
-            titulo = info.get('title', 'video')
-            
-            # Encontrar archivo
-            ext = 'mp3' if tipo == 'audio' else 'mp4'
-            filename = f"{titulo}_{session_id}.{ext}"
-            
-            # Buscar el archivo real
-            for f in os.listdir(TEMP_DIR):
-                if session_id in f:
-                    filepath = os.path.join(TEMP_DIR, f)
-                    clean_name = f.replace(f'_{session_id}', '')
-                    return send_file(filepath, as_attachment=True, download_name=clean_name)
-                    
-        return "Archivo no encontrado", 404
+        # Llamar a API de cobalt
+        response = requests.post(COBALT_API, json=data, headers=headers, timeout=30)
+        result = response.json()
         
+        if result.get('status') == 'stream':
+            # Éxito - redirigir a URL de descarga
+            return redirect(result['url'])
+            
+        elif result.get('status') == 'picker':
+            # Múltiples calidades disponibles
+            return render_template('picker.html', 
+                                   urls=result.get('urls', []),
+                                   audio=result.get('audio', ''))
+            
+        elif result.get('status') == 'error':
+            error_msg = result.get('error', {}).get('code', 'Error desconocido')
+            return f"Error de cobalt: {error_msg}", 400
+            
+        else:
+            return f"Respuesta inesperada: {result}", 500
+            
+    except requests.Timeout:
+        return "Timeout - el video es muy largo o la API está lenta", 504
     except Exception as e:
         return f"Error: {str(e)}", 500
 
+@app.route('/api/info', methods=['POST'])
+def info():
+    """Endpoint AJAX para obtener info sin redirigir"""
+    url = request.json.get('url')
+    tipo = request.json.get('tipo', 'video')
+    
+    if not url:
+        return jsonify({'error': 'URL requerida'}), 400
+    
+    try:
+        headers = {
+            "Accept": "application/json", 
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "url": url,
+            "isAudio": tipo == 'audio',
+            "filenamePattern": "basic"
+        }
+        
+        response = requests.post(COBALT_API, json=data, headers=headers, timeout=30)
+        result = response.json()
+        
+        if result.get('status') == 'stream':
+            return jsonify({
+                'success': True,
+                'url': result['url'],
+                'filename': result.get('filename', 'download')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', {}).get('code', 'Error')
+            }), 400
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)

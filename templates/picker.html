@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Seleccionar Calidad</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Selecciona la calidad</h1>
+        
+        <div class="calidades">
+            {% for item in urls %}
+            <a href="{{ item.url }}" class="calidad-btn" target="_blank">
+                {{ item.quality or 'Calidad' }} - {{ item.type or 'video' }}
+            </a>
+            {% endfor %}
+        </div>
+        
+        {% if audio %}
+        <h3>🎵 Audio</h3>
+        <a href="{{ audio }}" class="calidad-btn audio-btn" target="_blank">
+            Descargar solo audio
+        </a>
+        {% endif %}
+    </div>
+</body>
+</html>
